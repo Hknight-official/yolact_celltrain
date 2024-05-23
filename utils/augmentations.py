@@ -156,6 +156,7 @@ class Resize(object):
             # Act like each object is a color channel
             masks = masks.transpose((1, 2, 0))
             cv_limit = 512
+
             if masks.shape[2] <= cv_limit:
                 masks = cv2.resize(masks, (width, height))
             else:
