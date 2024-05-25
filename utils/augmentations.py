@@ -161,8 +161,14 @@ class Resize(object):
                 masks = cv2.resize(masks, (width, height))
             else:
                 # split masks array on batches with max size 512 along channel axis, resize and merge them back
-                masks = np.concatenate([cv2.resize(masks[:, :, i:min(i + cv_limit, masks.shape[2])], (width, height))
-                                        for i in range(0, masks.shape[2], cv_limit)], axis=2)
+                resized_masks = []
+
+                for i in range(0, masks.shape[2], cv_limit):
+                    resized_chunk = cv2.resize(masks[:, :, i:min(i + cv_limit, masks.shape[2])], (width, height))
+                    resized_masks.append(resized_chunk)
+
+                # Stack the resized masks along the depth axis
+                masks = np.dstack(resized_masks)
             
             # OpenCV resizes a (w,h,1) array to (s,s), so fix that
             if len(masks.shape) == 2:
