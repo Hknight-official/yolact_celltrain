@@ -138,7 +138,7 @@ def prep_display(dets_out, img, h, w, undo_transform=True, class_color=False, ma
     """
     if undo_transform:
         img_numpy = undo_image_transformation(img, w, h)
-        img_gpu = torch.Tensor(img_numpy).cuda()
+        img_gpu = torch.Tensor(img_numpy).cpu()
     else:
         img_gpu = img / 255.0
         h, w, _ = img.shape
@@ -187,26 +187,17 @@ def prep_display(dets_out, img, h, w, undo_transform=True, class_color=False, ma
     # Beware: very fast but possibly unintelligible mask-drawing code ahead
     # I wish I had access to OpenGL or Vulkan but alas, I guess Pytorch tensor operations will have to suffice
     if args.display_masks and cfg.eval_mask_branch and num_dets_to_consider > 0:
-        # After this, mask is of size [num_dets, h, w, 1]
-        masks = masks[:num_dets_to_consider, :, :, None]
-        
-        # Prepare the RGB images for each mask given their color (size [num_dets, h, w, 1])
-        colors = torch.cat([get_color(j, on_gpu=img_gpu.device.index).view(1, 1, 1, 3) for j in range(num_dets_to_consider)], dim=0)
-        masks_color = masks.repeat(1, 1, 1, 3) * colors * mask_alpha
-
-        # This is 1 everywhere except for 1-mask_alpha where the mask is
-        inv_alph_masks = masks * (-mask_alpha) + 1
-        
-        # I did the math for this on pen and paper. This whole block should be equivalent to:
-        #    for j in range(num_dets_to_consider):
-        #        img_gpu = img_gpu * inv_alph_masks[j] + masks_color[j]
-        masks_color_summand = masks_color[0]
-        if num_dets_to_consider > 1:
-            inv_alph_cumul = inv_alph_masks[:(num_dets_to_consider-1)].cumprod(dim=0)
-            masks_color_cumul = masks_color[1:] * inv_alph_cumul
-            masks_color_summand += masks_color_cumul.sum(dim=0)
-
-        img_gpu = img_gpu * inv_alph_masks.prod(dim=0) + masks_color_summand
+        # Giả sử masks có kích thước [num_dets, h, w]
+        masks = masks[:num_dets_to_consider]
+        # Tạo hình ảnh đầu ra trống với cùng kích thước như hình ảnh gốc
+        img_gpu = torch.zeros_like(img_gpu)
+        # Áp dụng từng mask lên hình ảnh trống
+        for i in range(num_dets_to_consider):
+            color = get_color(i)
+            color_tensor = torch.tensor(color).float() / 255.0  # Chuyển màu về dạng tensor và chuẩn hóa giá trị
+            img_gpu += masks[i].unsqueeze(-1).repeat(1, 1, 3) * color_tensor
+    else:
+        img_gpu *= 0
     
     if args.display_fps:
             # Draw the box for the fps on the GPU
